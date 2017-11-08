@@ -1,0 +1,271 @@
+---
+title: "Module-15"
+author: "Julie Jung"
+date: "November 7, 2017"
+output: html_document
+---
+
+Install these packages in R: {curl}, {ggplot2}, {gridExtra}, {dplyr}, {car}
+
+
+constructing a dataset ourselves of some correlated random normal continuous variables.
+
+we define a matrix of correlations among our variables (you can play with the values in this matrix, but it must be symmetric):
+
+```{r}
+R = matrix(cbind(1, 0.8, -0.5, 0, 0.8, 1, -0.3, 0.3, -0.5, -0.3, 1, 0.6, 0, 
+    0.3, 0.6, 1), nrow = 4)
+```
+Second, let’s generate a dataset of random normal variables where each has a defined mean and standard deviation and then bundle these into a matrix (“M”) and a dataframe (“orig”):
+
+```{r}
+
+n <- 1000
+k <- 4
+M <- NULL
+V <- NULL
+mu <- c(15, 40, 5, 23)  # vector of variable means
+s <- c(5, 20, 4, 15)  # vector of variable SDs
+for (i in 1:k) {
+    V <- rnorm(n, mu[i], s[i])
+    M <- cbind(M, V)
+}
+M <- matrix(M, nrow = n, ncol = k)
+orig <- as.data.frame(M)
+names(orig) = c("Y", "X1", "X2", "X3")
+head(orig)
+
+
+cor(orig)  # variables are uncorrelated
+
+```
+
+ideal condition is that none is correlated with each other
+
+```{r}
+plot(orig)  # does quick bivariate plots for each pair of variables; using `pairs(orig)` would do the same
+
+```
+
+no correlation - no covariance - is ideal. 
+
+
+Now, let’s normalize and standardize our variables by subtracting the relevant means and dividing by the standard deviation. This converts them to Z scores from a standard normal distribution.
+
+
+```{r}
+
+ms <- apply(orig, 2, FUN = "mean")  # returns a vector of means, where we are taking this across dimension 2 of the array 'orig'
+ms
+
+
+sds <- apply(orig, 2, FUN = "sd")
+sds
+
+## sweep the change across orig dataset
+# 2 - sweep across columns, not rows
+# subtract stdarized mean from regular mean
+
+normalized <- sweep(orig, 2, STATS = ms, FUN = "-")  # 2nd dimension is columns, removing array of means, function = subtract
+normalized <- sweep(normalized, 2, STATS = sds, FUN = "/")  # 2nd dimension is columns, scaling by array of sds, function = divide
+head(normalized)  # now a dataframe of Z scores
+
+
+M <- as.matrix(normalized)  # redefine M as our matrix of normalized variables
+# bc it's more useful for some of the functions we'll use
+```
+With apply() we apply a function to the specified margin of an array or matrix, and with sweep() we then perform whatever function is specified on all of the elements in an array specified by the given margin.
+
+in order to alter our dataset and standardize it. 
+
+```{r}
+U = chol(R)
+newM = M %*% U #M is our normalized data matrix #U is our decomposed data matrix
+new = as.data.frame(newM)
+names(new) = c("Y", "X1", "X2", "X3") #rename columns 
+cor(new)  # note that is correlation matrix is what we are aiming for!
+#replicates the defined correlation relationships that we wanted in the beginning 
+
+# this is how you create a fake dataset that is consistent with the stuff/qualities you want a fake datset to look like 
+```
+^^^ this is the way we impose the correlation structure to our non-correlated, created dataset (M). 
+
+yield a transformed dataset with the specified correlation among variables
+
+```{r}
+plot(orig)
+
+plot(new)  # note the axis scales; using `pairs(new)` would plot the same
+```
+can see the effect of having correlated variables. 
+
+```{r}
+
+df <- sweep(new, 2, STATS = sds, FUN = "*")  # scale back out to original mean...
+df <- sweep(df, 2, STATS = ms, FUN = "+")  # and standard deviation
+head(df)
+
+cor(df)
+
+plot(df)  # note the change to the axis scales; using `pairs(d)` would produce the same plot
+
+```
+
+CHALLENGE
+
+
+```{r}
+
+library(ggplot2)
+require(gridExtra) # par command for ggplot
+
+g1 <- ggplot(data = df, aes(x = X1, y = Y)) + geom_point() + geom_smooth(method = "lm", 
+    formula = y ~ x)
+g2 <- ggplot(data = df, aes(x = X2, y = Y)) + geom_point() + geom_smooth(method = "lm", 
+    formula = y ~ x)
+g3 <- ggplot(data = df, aes(x = X3, y = Y)) + geom_point() + geom_smooth(method = "lm", 
+    formula = y ~ x)
+grid.arrange(g1, g2, g3, ncol = 3)
+
+```
+
+0.8 positive correlation
+negative 
+0 correlation between y and x3
+
+we defined all of these
+
+```{r}
+m1 <- lm(data = df, formula = Y ~ X1)
+summary(m1)
+
+m2 <- lm(data = df, formula = Y ~ X2)
+summary(m2)
+
+m3 <- lm(data = df, formula = Y ~ X3)
+summary(m3)
+
+```
+In simple linear regression, YY has a significant, positive relationship with X1X1, a signficant negative relationship with X2X2, and no significant bivariate relationship with X3X3.
+
+looking at coefficients for m1 - positive and significant, etc etc. 
+
+_______________
+
+Now let’s move on to doing actual multiple regression. To review, with multiple regression, we are looking to model a response variable in terms of two or more predictor variables so we can evaluate the effect of several explanatory variables.
+
+Using lm() and formula notation, we can fit a model with all three predictor variables. The + sign is used to add additional predictors to our model.
+ 
+
+```{r}
+
+m <- lm(data = df, formula = Y ~ X1 + X2 + X3)
+coef(m) ## gives you the beta values
+
+
+summary(m) # whole model output ##x3 covaries with other significant variables e.g. 60% covaries with x2. so now x3 also has significance. 
+
+# let's check if our residuals are random normal...
+plot(fitted(m), residuals(m)) # random cloud is what we want
+#if structure (line, or a cloud with a slope ) here --> means there's some covariate that we haven't accounted for in our model , can't trust our results. 
+# bc only supposed to represent random error. all that our model isn't accounting for is random error. 
+
+hist(residuals(m))
+qqnorm(residuals(m))
+```
+
+calculate the F statistic
+```{r}
+f <- (summary(m)$r.squared * (nrow(df) - (ncol(df) - 1) - 1))/((1 - summary(m)$r.squared) * 
+    (ncol(df) - 1))
+f
+
+
+```
+
+Challenge
+```{r}
+
+library(curl)
+f <- curl("https://raw.githubusercontent.com/fuzzyatelin/fuzzyatelin.github.io/master/AN597_Fall17/zombies.csv")
+z <- read.csv(f, header = TRUE, sep = ",", stringsAsFactors = TRUE)
+head(z)
+
+
+
+m <- lm(data = z, height ~ weight + age)
+summary(m)
+```
+
+```{r}
+
+library(car)
+m <- lm(data = z, formula = height ~ gender + age)
+summary(m)
+
+m.aov <- Anova(m, type = "II")
+m.aov
+
+plot(fitted(m), residuals(m))
+
+hist(residuals(m))
+
+qqnorm(residuals(m))
+
+```
+OUTPUT: "Controlling for age, being male adds 4 inches to predicted height when compared to being female."
+
+
+visualize the results separately for males and females
+
+```{r}
+library(ggplot2)
+p <- ggplot(data = z, aes(x = age, y = height)) + geom_point(aes(color = factor(gender))) + 
+    scale_color_manual(values = c("goldenrod", "blue"))
+p <- p + geom_abline(slope = m$coefficients[3], intercept = m$coefficients[1], 
+    color = "goldenrod4")
+p <- p + geom_abline(slope = m$coefficients[3], intercept = m$coefficients[1] + 
+    m$coefficients[2], color = "darkblue")
+p
+
+```
+
+getting CIs
+
+```{r}
+m <- lm(data = z, formula = height ~ age + gender)
+summary(m)
+
+confint(m, level = 0.95)
+
+```
+
+Similarly, using predict() allows us to determine confidence intervals for the predicted mean response and prediction intervals for individual responses for a given combination of predictor variables.
+
+What is the estimated mean height, in inches, for a 29 year old male who has survived the zombie apocalypse?
+
+```{r}
+
+ci <- predict(m, newdata = data.frame(age = 29, gender = "Male"), interval = "confidence", 
+    level = 0.95)
+ci
+
+#newdata call = specific thing we'd like to predict 
+```
+
+What is the 95% confidence interval around this mean height?
+
+```{r}
+ci <- predict(m, newdata = data.frame(age = 29, gender = "Male"), interval = "confidence", 
+    level = 0.95)
+ci
+
+```
+
+What is the 95% prediction interval for the individual heights of 29 year old male survivors?
+```{r}
+
+pi <- predict(m, newdata = data.frame(age = 29, gender = "Male"), interval = "prediction", 
+    level = 0.95)
+pi
+```
